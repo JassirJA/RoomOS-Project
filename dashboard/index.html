@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ROOM OS — Room Intelligence Runtime</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="room-os-theme">
+  <!-- Top OS Bar -->
+  <header class="os-header">
+    <div class="header-left">
+      <div class="os-logo">
+        <span class="logo-radar"></span>
+        <span class="logo-title">ROOM <span class="accent-text">OS</span></span>
+      </div>
+      <div class="os-tagline">“Don’t watch the room. Sense the room.”</div>
+    </div>
+    <div class="header-right">
+      <div class="sensor-badge" id="sensor-badge">
+        <span class="status-dot offline"></span>
+        <span id="sensor-status-label">ESP32 RX: DISCONNECTED</span>
+      </div>
+      <div class="system-time" id="system-clock">--:--:--</div>
+      <button class="btn-calibrate" id="btn-calibrate" title="Calibrate Room Baseline">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+        Calibrate Room
+      </button>
+    </div>
+  </header>
+
+  <!-- Calibration Banner / Progress Overlay -->
+  <div class="calibration-overlay" id="calibration-overlay">
+    <div class="calibration-modal">
+      <div class="calib-spinner"></div>
+      <h3>CALIBRATING ROOM BASELINE</h3>
+      <p>Observing ambient multipath... Estimating noise floor... Learning spatial stillness...</p>
+      <div class="calib-progress-bar">
+        <div class="calib-progress-fill" id="calib-progress-fill"></div>
+      </div>
+      <div class="calib-stats" id="calib-stats">Collecting quiet room frames...</div>
+    </div>
+  </div>
+
+  <!-- Main OS Grid -->
+  <main class="os-container">
+
+    <!-- HERO PANEL: PRIMARY ROOM STATE -->
+    <section class="panel hero-panel">
+      <div class="panel-header">
+        <h2>ROOM STATE</h2>
+        <div class="status-pill" id="room-status-pill">INITIALIZING</div>
+      </div>
+
+      <div class="room-state-grid">
+        <!-- Presence & Occupancy -->
+        <div class="state-card presence-card" id="card-presence">
+          <div class="card-label">PRESENCE</div>
+          <div class="card-value" id="val-presence">--</div>
+          <div class="card-sub" id="val-occupancy">Occupancy: 0</div>
+        </div>
+
+        <!-- Activity -->
+        <div class="state-card activity-card" id="card-activity">
+          <div class="card-label">CLASSIFIED ACTIVITY</div>
+          <div class="card-value large" id="val-activity">UNKNOWN</div>
+          <div class="card-sub" id="val-duration">Duration: 0.0s</div>
+        </div>
+
+        <!-- Motion Level -->
+        <div class="state-card metric-card">
+          <div class="card-label">MOTION LEVEL</div>
+          <div class="card-value" id="val-motion">0.00</div>
+          <div class="meter-bar">
+            <div class="meter-fill" id="fill-motion" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Room Stability -->
+        <div class="state-card metric-card">
+          <div class="card-label">ROOM STABILITY</div>
+          <div class="card-value" id="val-stability">1.00</div>
+          <div class="meter-bar">
+            <div class="meter-fill fill-green" id="fill-stability" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <!-- Confidence Gauge -->
+        <div class="state-card metric-card">
+          <div class="card-label">CONFIDENCE</div>
+          <div class="card-value" id="val-confidence">0%</div>
+          <div class="confidence-bars">
+            <div class="conf-item">
+              <span>Signal</span>
+              <span id="sub-conf-signal">--</span>
+            </div>
+            <div class="conf-item">
+              <span>Baseline</span>
+              <span id="sub-conf-base">--</span>
+            </div>
+            <div class="conf-item">
+              <span>Activity</span>
+              <span id="sub-conf-act">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DISPLACEMENT ALERT BANNER -->
+      <div class="displacement-alert" id="displacement-alert" style="display: none;">
+        <span>⚠️</span>
+        <div><strong>PHYSICAL DEVICE DISPLACEMENT DETECTED:</strong> ESP32 node or antenna moved. Baseline invalidated. Recalibration required.</div>
+      </div>
+
+      <!-- PATENT INNOVATIONS STATUS BAR -->
+      <div class="patent-bar" id="patent-bar">
+        <div class="patent-item">
+          <span class="p-label">BASELINE GATE:</span>
+          <span class="p-val badge-gate locked" id="val-gate">LOCKED</span>
+        </div>
+        <div class="patent-item">
+          <span class="p-label">VERIFICATION PROBE:</span>
+          <span class="p-val badge-probe" id="val-probe">IDLE (100 Hz)</span>
+        </div>
+        <div class="patent-item">
+          <span class="p-label">SUBCARRIERS:</span>
+          <span class="p-val" id="val-subcarriers">64/64 Active</span>
+        </div>
+        <div class="patent-item">
+          <span class="p-label">DRIFT METRIC:</span>
+          <span class="p-val" id="val-drift">0.000 (STABLE)</span>
+        </div>
+        <div class="patent-item">
+          <span class="p-label">STATE VECTOR:</span>
+          <span class="p-val mono-code" id="val-state-vector">R_t=[0, UNKNOWN, 0, 1, 0, 0, 0]</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- MIDDLE ROW: LIVE CSI + WHY EVIDENCE -->
+    <div class="two-column-layout">
+      <!-- LIVE CSI SENSING -->
+      <section class="panel csi-panel">
+        <div class="panel-header">
+          <h2>LIVE CSI SUBCARRIER SPECTRUM</h2>
+          <div class="csi-meta">
+            <span id="meta-subcarriers">64 Subcarriers</span> |
+            <span id="meta-disturbance">Disturbance: 1.0x</span>
+          </div>
+        </div>
+
+        <div class="canvas-wrapper">
+          <canvas id="csi-canvas" width="600" height="220"></canvas>
+          <div class="canvas-labels">
+            <span>-Nsr (Low Freq)</span>
+            <span>Center Pilot</span>
+            <span>+Nsr (High Freq)</span>
+          </div>
+        </div>
+
+        <div class="disturbance-strip">
+          <div class="dist-meter-label">MULTIPATH DISTURBANCE VS BASELINE:</div>
+          <div class="dist-meter-track">
+            <div class="dist-meter-fill" id="dist-meter-fill" style="width: 10%"></div>
+            <div class="dist-baseline-marker" title="Baseline threshold"></div>
+          </div>
+          <span class="dist-val" id="dist-val">1.0x</span>
+        </div>
+      </section>
+
+      <!-- WHY? EVIDENCE PANEL -->
+      <section class="panel why-panel" id="panel-why">
+        <div class="panel-header">
+          <h2>DIAGNOSTIC EVIDENCE (“WHY?”)</h2>
+          <span class="evidence-status" id="evidence-status">OBSERVING</span>
+        </div>
+
+        <div class="why-content" id="why-content">
+          <div class="why-empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+            <p>Room metrics nominal. When activity transitions or anomalies occur, verifiable RF evidence is displayed here.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- BOTTOM ROW: TIMELINE, MEMORY, SYSTEM HEALTH -->
+    <div class="three-column-layout">
+
+      <!-- TEMPORAL TIMELINE -->
+      <section class="panel timeline-panel">
+        <div class="panel-header">
+          <h2>TEMPORAL TRAJECTORY</h2>
+          <span class="tag-meta">Sequence</span>
+        </div>
+        <div class="timeline-list" id="timeline-list">
+          <div class="timeline-item active">
+            <div class="time-marker"></div>
+            <div class="time-content">
+              <span class="state-name">OBSERVING</span>
+              <span class="state-meta">Starting trajectory tracker...</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ROOM MEMORY (SQLITE LOG) -->
+      <section class="panel memory-panel">
+        <div class="panel-header">
+          <h2>ROOM MEMORY</h2>
+          <span class="tag-meta">SQLite</span>
+        </div>
+        <div class="memory-log-list" id="memory-log-list">
+          <div class="log-entry">Waiting for events...</div>
+        </div>
+      </section>
+
+      <!-- SYSTEM & SENSOR HEALTH -->
+      <section class="panel health-panel">
+        <div class="panel-header">
+          <h2>SYSTEM HEALTH</h2>
+          <span class="health-indicator alert" id="health-overall">DISCONNECTED</span>
+        </div>
+        <div class="health-grid">
+          <div class="health-row">
+            <span class="health-key">ESP32 TX (Node #1)</span>
+            <span class="health-val text-red" id="health-tx">OFFLINE</span>
+          </div>
+          <div class="health-row">
+            <span class="health-key">ESP32 RX (Node #2)</span>
+            <span class="health-val text-red" id="health-rx">DISCONNECTED</span>
+          </div>
+          <div class="health-row">
+            <span class="health-key">Packet Rate</span>
+            <span class="health-val" id="health-pkt-rate">0.0 Hz</span>
+          </div>
+          <div class="health-row">
+            <span class="health-key">RSSI / Noise Floor</span>
+            <span class="health-val" id="health-rssi">-- dBm / -- dBm</span>
+          </div>
+          <div class="health-row">
+            <span class="health-key">Baseline Status</span>
+            <span class="health-val text-muted" id="health-baseline">AWAITING HARDWARE</span>
+          </div>
+          <div class="health-row">
+            <span class="health-key">Hardware Topology</span>
+            <span class="health-val">Direct (No Router)</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

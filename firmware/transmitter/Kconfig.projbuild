@@ -1,0 +1,40 @@
+menu "Room OS Transmitter Configuration"
+
+    config ROOM_OS_WIFI_CHANNEL
+        int "Wi-Fi Channel (1-14)"
+        range 1 14
+        default 11
+        help
+            The 2.4 GHz Wi-Fi channel for transmitter and receiver.
+            Defaults to channel 11. Test channels 1, 6, or 11 to determine cleanest CSI.
+
+    choice ROOM_OS_WIFI_BANDWIDTH
+        prompt "Wi-Fi Channel Bandwidth"
+        default ROOM_OS_WIFI_BW_HT40
+        help
+            Select channel bandwidth (HT20 or HT40).
+            HT40 yields more subcarriers (richer sensing profile),
+            while HT20 may experience lower interference in congested bands.
+
+        config ROOM_OS_WIFI_BW_HT20
+            bool "HT20 (20 MHz, ~64 subcarriers)"
+
+        config ROOM_OS_WIFI_BW_HT40
+            bool "HT40 (40 MHz, ~128 subcarriers)"
+    endchoice
+
+    config ROOM_OS_TX_RATE_HZ
+        int "Transmission Rate in Hz (Packets per second)"
+        range 10 250
+        default 100
+        help
+            Rate at which ESP-NOW packets are transmitted.
+            100 Hz provides high temporal resolution for micro-motion and walking.
+
+    config ROOM_OS_TX_POWER_MAX
+        bool "Set Max Wi-Fi Tx Power (20dBm)"
+        default y
+        help
+            Ensures strongest direct-path signal between the two ESP32 nodes.
+
+endmenu

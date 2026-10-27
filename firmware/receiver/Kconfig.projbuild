@@ -1,0 +1,31 @@
+menu "Room OS Receiver Configuration"
+
+    config ROOM_OS_WIFI_CHANNEL
+        int "Wi-Fi Channel (1-14)"
+        range 1 14
+        default 11
+        help
+            Must match the channel configured on the Room OS Transmitter.
+            Defaults to channel 11.
+
+    choice ROOM_OS_WIFI_BANDWIDTH
+        prompt "Wi-Fi Channel Bandwidth"
+        default ROOM_OS_WIFI_BW_HT40
+        help
+            Must match the bandwidth configured on the Room OS Transmitter.
+
+        config ROOM_OS_WIFI_BW_HT20
+            bool "HT20 (20 MHz, ~64 subcarriers)"
+
+        config ROOM_OS_WIFI_BW_HT40
+            bool "HT40 (40 MHz, ~128 subcarriers)"
+    endchoice
+
+    config ROOM_OS_SERIAL_BAUD
+        int "Serial Port Baud Rate"
+        default 921600
+        help
+            UART baud rate for streaming CSI frames to the laptop.
+            921600 baud easily handles 100 Hz CSI packets with ~128 subcarriers.
+
+endmenu
