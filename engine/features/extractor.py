@@ -13,21 +13,37 @@ from collections import deque
 class CSIFeatureExtractor:
     """Computes multidimensional feature vectors across temporal CSI windows."""
 
-    def __init__(self, window_size: int = 50):
+    def __init__(
+        self,
+        window_size: int = 10,
+        lag_short: int = 1,
+        lag_mid: int = 1,
+        lag_long: int = 3
+    ):
         """
-        window_size: Number of consecutive CSI amplitude vectors in the sliding buffer
-                     (e.g., 50 frames @ 100 Hz = 0.5s window).
+        window_size: Number of consecutive CSI amplitude vectors in the sliding buffer.
         """
-        self.window_size = window_size
-        self.amplitude_buffer: deque = deque(maxlen=window_size)
-        self.timestamp_buffer: deque = deque(maxlen=window_size)
+        self.window_size = max(1, window_size)
+        self.lag_short = max(1, lag_short)
+        self.lag_mid = max(1, lag_mid)
+        self.lag_long = max(1, lag_long)
+        self.amplitude_buffer: deque = deque(maxlen=self.window_size)
+        self.timestamp_buffer: deque = deque(maxlen=self.window_size)
+
+    def set_rate_parameters(self, window_size: int, lag_short: int, lag_mid: int, lag_long: int):
+        self.window_size = max(1, window_size)
+        self.lag_short = max(1, lag_short)
+        self.lag_mid = max(1, lag_mid)
+        self.lag_long = max(1, lag_long)
+        self.amplitude_buffer = deque(self.amplitude_buffer, maxlen=self.window_size)
+        self.timestamp_buffer = deque(self.timestamp_buffer, maxlen=self.window_size)
 
     def add_frame(self, amplitudes: np.ndarray, timestamp: float):
         self.amplitude_buffer.append(amplitudes)
         self.timestamp_buffer.append(timestamp)
 
     def is_ready(self) -> bool:
-        return len(self.amplitude_buffer) >= (self.window_size // 2)
+        return len(self.amplitude_buffer) >= max(2, self.window_size // 2)
 
     def extract_features(
         self,
@@ -43,7 +59,7 @@ class CSIFeatureExtractor:
         - Subcarrier Cross-Correlation mean
         - Motion energy score
         """
-        if len(self.amplitude_buffer) < 4:
+        if len(self.amplitude_buffer) < 2:
             return {
                 "mean_energy": 0.0,
                 "temporal_variance": 0.0,
@@ -142,24 +158,25 @@ class CSIFeatureExtractor:
             f_curr = W[-1]
             norm_c = float(np.linalg.norm(f_curr))
             if norm_c > 1e-4:
-                # Immediate consecutive (lag 1, ~10ms)
-                f_1 = W[-2]
-                norm_1 = float(np.linalg.norm(f_1))
-                d_1 = max(0.0, 1.0 - float(np.dot(f_curr, f_1) / (norm_c * norm_1))) if norm_1 > 1e-4 else 0.0
+                # Dynamic short lag (intra-gesture micro-motion)
+                idx_short = max(0, T - 1 - self.lag_short)
+                f_short = W[idx_short]
+                norm_short = float(np.linalg.norm(f_short))
+                d_short = max(0.0, 1.0 - float(np.dot(f_curr, f_short) / (norm_c * norm_short))) if norm_short > 1e-4 else 0.0
 
-                # Fine gesture / hand transition lag (~30ms)
-                idx_mid = max(0, T - 3)
+                # Dynamic mid lag (hand transition across beam)
+                idx_mid = max(0, T - 1 - self.lag_mid)
                 f_mid = W[idx_mid]
                 norm_mid = float(np.linalg.norm(f_mid))
-                d_mid = max(0.0, 1.0 - float(np.dot(f_curr, f_mid) / (norm_c * norm_mid))) if norm_mid > 1e-4 else d_1
+                d_mid = max(0.0, 1.0 - float(np.dot(f_curr, f_mid) / (norm_c * norm_mid))) if norm_mid > 1e-4 else d_short
 
-                # Physical hand passage across beam (~60ms)
-                idx_slow = max(0, T - 6)
-                f_slow = W[idx_slow]
-                norm_slow = float(np.linalg.norm(f_slow))
-                d_slow = max(0.0, 1.0 - float(np.dot(f_curr, f_slow) / (norm_c * norm_slow))) if norm_slow > 1e-4 else d_mid
+                # Dynamic long lag (macro displacement)
+                idx_long = max(0, T - 1 - self.lag_long)
+                f_long = W[idx_long]
+                norm_long = float(np.linalg.norm(f_long))
+                d_long = max(0.0, 1.0 - float(np.dot(f_curr, f_long) / (norm_c * norm_long))) if norm_long > 1e-4 else d_mid
 
-                cosine_distance = float(0.40 * d_1 + 0.35 * d_mid + 0.25 * d_slow)
+                cosine_distance = float(0.40 * d_short + 0.35 * d_mid + 0.25 * d_long)
 
         return {
             "mean_energy": mean_energy,

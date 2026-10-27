@@ -13,6 +13,7 @@ Formal Room-State Vector -> Event Bus -> Room Memory.
 import time
 import logging
 import numpy as np
+from collections import deque
 from typing import Optional, Dict, Any, Callable
 
 from engine.events.bus import event_bus, EventType
@@ -34,6 +35,14 @@ from engine.confidence.confidence_engine import ConfidenceEngine
 from engine.room_state.state_manager import RoomStateManager
 
 logger = logging.getLogger("room_os.runtime")
+
+# Target rate-dependent timing defined in seconds
+TARGET_WINDOW_S = 0.25      # 250ms sliding feature window
+TARGET_STARTUP_S = 0.50     # 500ms startup stillness baseline
+TARGET_DEBOUNCE_S = 0.06    # 60ms state transition debounce
+TARGET_LAG_SHORT_S = 0.02   # 20ms fast micro-motion lag
+TARGET_LAG_MID_S = 0.05     # 50ms transition lag
+TARGET_LAG_LONG_S = 0.10    # 100ms macro motion lag
 
 class RoomOSRuntime:
     """Core Room OS runtime engine implementing all 7 patent-grade subsystems."""
@@ -74,7 +83,7 @@ class RoomOSRuntime:
             )
         else:
             self.ingest_source = SerialClient(
-                port=self.port or "COM3",
+                port=self.port,
                 baudrate=self.baudrate,
                 on_line_received=self.handle_raw_line,
                 on_disconnect=self._handle_disconnect,
@@ -89,6 +98,35 @@ class RoomOSRuntime:
         self.packet_count = 0
         self._last_motion_level = 0.0
         self._startup_baseline_samples: list = []
+
+        # Dynamic packet rate estimation and rate-dependent parameters
+        self.measured_rate_hz: float = 28.0
+        self._packet_timestamps: deque = deque(maxlen=30)
+        self.startup_frames: int = max(1, round(self.measured_rate_hz * TARGET_STARTUP_S))
+        self._apply_rate(self.measured_rate_hz)
+
+    def _apply_rate(self, rate_hz: float):
+        """Recomputes window sizes, lags, debounce, and startup frames from estimated rate."""
+        self.measured_rate_hz = rate_hz
+        window_frames = max(1, round(rate_hz * TARGET_WINDOW_S))
+        self.startup_frames = max(1, round(rate_hz * TARGET_STARTUP_S))
+        debounce_frames = max(1, round(rate_hz * TARGET_DEBOUNCE_S))
+        lag_short = max(1, round(rate_hz * TARGET_LAG_SHORT_S))
+        lag_mid = max(1, round(rate_hz * TARGET_LAG_MID_S))
+        lag_long = max(1, round(rate_hz * TARGET_LAG_LONG_S))
+
+        self.feature_extractor.set_rate_parameters(
+            window_size=window_frames,
+            lag_short=lag_short,
+            lag_mid=lag_mid,
+            lag_long=lag_long
+        )
+        self.temporal_engine.set_debounce_frames(debounce_frames)
+        logger.info(
+            f"[RATE ADAPTATION] Rate: {rate_hz:.1f} Hz -> Window: {window_frames}f ({TARGET_WINDOW_S:.2f}s), "
+            f"Startup: {self.startup_frames}f ({TARGET_STARTUP_S:.2f}s), Debounce: {debounce_frames}f ({TARGET_DEBOUNCE_S:.2f}s), "
+            f"Lags: [{lag_short}, {lag_mid}, {lag_long}]f ([{TARGET_LAG_SHORT_S:.2f}s, {TARGET_LAG_MID_S:.2f}s, {TARGET_LAG_LONG_S:.2f}s])"
+        )
 
     def _on_calibration_completed(self, event_type: str, data: Any):
         """Calculates subcarrier reliability profile when calibration finishes."""
@@ -116,9 +154,8 @@ class RoomOSRuntime:
     def start_calibration(self, duration_s: float = 1.0):
         """Triggers room baseline calibration."""
         self.displacement_detector.reset()
-        # Use actual observed packet rate or default to 15 Hz
-        observed_rate = getattr(self.ingest_source, 'packet_rate_hz', 15.0)
-        effective_rate = max(10, min(150, int(observed_rate))) if observed_rate > 1 else 15
+        observed_rate = self.measured_rate_hz
+        effective_rate = max(10, min(150, int(observed_rate))) if observed_rate > 1 else 28
         self.baseline_engine.start_calibration(duration_s=duration_s, sample_rate_hz=effective_rate)
 
     def set_mock_activity(self, activity: str):
@@ -164,6 +201,15 @@ class RoomOSRuntime:
         pkt_mac = str(packet.get("mac", "")).lower()
         if pkt_mac and pkt_mac != "1a:00:00:00:00:00" and not self.use_mock:
             return
+
+        # Estimate packet rate over rolling window and adapt parameters if drifted
+        self._packet_timestamps.append(now)
+        if len(self._packet_timestamps) >= 10:
+            dt = self._packet_timestamps[-1] - self._packet_timestamps[0]
+            if dt > 0.2:
+                instant_rate = (len(self._packet_timestamps) - 1) / dt
+                if abs(instant_rate - self.measured_rate_hz) > 2.0:
+                    self._apply_rate(instant_rate)
 
         # 1. Parse complex I/Q values into numpy arrays
         CSIParser.enrich_packet(packet)
@@ -217,16 +263,16 @@ class RoomOSRuntime:
         self.latest_subcarrier_phases = sanitized_phases.tolist()
         self.packet_count += 1
 
-        # Auto-initialize baseline from the first 15 still frames if no baseline exists
+        # Auto-initialize baseline from startup still frames if no baseline exists
         if not self.baseline_engine.is_ready and not self.baseline_engine.is_calibrating:
             self._startup_baseline_samples.append(filtered_amplitudes.copy())
-            if len(self._startup_baseline_samples) >= 15:
+            if len(self._startup_baseline_samples) >= self.startup_frames:
                 self.baseline_engine.compute_from_samples(
                     self._startup_baseline_samples,
                     rssi=packet.get("rssi", -50),
                     noise=packet.get("noise_floor", -95)
                 )
-                logger.info("Room baseline automatically zeroed and calibrated from startup stillness.")
+                logger.info(f"Room baseline automatically zeroed and calibrated from {self.startup_frames} startup stillness frames.")
 
         # 3. Handle Room Baseline Calibration mode
         if self.baseline_engine.is_calibrating:
@@ -302,7 +348,7 @@ class RoomOSRuntime:
         self._last_motion_level = motion_level
 
         # 7. RF Link & Signal Quality
-        pkt_rate = getattr(self.ingest_source, "packet_rate_hz", 100.0)
+        pkt_rate = self.measured_rate_hz
         signal_quality = ConfidenceEngine.calculate_signal_quality(
             packet["rssi"], packet["noise_floor"], pkt_rate
         )

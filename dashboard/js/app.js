@@ -11,6 +11,14 @@ class RoomOSClient {
     this.subcarrierHistory = [];
     this.maxHistory = 40;
 
+    // Advanced Multi-Mode Chart State
+    this.currentChartMode = 'spectrum'; // 'spectrum' | 'wave' | 'waterfall'
+    this.waveHistory = [];
+    this.maxWaveHistory = 120;
+    this.waterfallHistory = [];
+    this.maxWaterfallHistory = 32;
+    this.lastTelemetry = null;
+
     this.initElements();
     this.initClock();
     this.initEvents();
@@ -36,6 +44,12 @@ class RoomOSClient {
 
     this.metaSubcarriers = document.getElementById('meta-subcarriers');
     this.metaDisturbance = document.getElementById('meta-disturbance');
+    this.metaPeak = document.getElementById('meta-peak');
+    this.hudMode = document.getElementById('hud-mode');
+    this.hudPort = document.getElementById('hud-port');
+    this.hudFps = document.getElementById('hud-fps');
+    this.canvasLabels = document.getElementById('canvas-labels');
+    this.chartTabs = document.querySelectorAll('.chart-tab');
     this.distMeterFill = document.getElementById('dist-meter-fill');
     this.distVal = document.getElementById('dist-val');
 
@@ -81,6 +95,29 @@ class RoomOSClient {
       this.triggerCalibration();
     });
 
+    // Chart switcher tabs
+    if (this.chartTabs) {
+      this.chartTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          this.chartTabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          this.currentChartMode = tab.dataset.chart;
+          if (this.hudMode) {
+            const map = {
+              spectrum: 'MODE: SPECTRUM',
+              wave: 'MODE: ROLLING EKG',
+              waterfall: 'MODE: HEATMAP'
+            };
+            this.hudMode.textContent = map[this.currentChartMode] || 'MODE: SPECTRUM';
+          }
+          this.updateAxisLabels();
+          if (this.lastTelemetry) {
+            this.renderCSIWaveform(this.lastTelemetry);
+          }
+        });
+      });
+    }
+
     // Mock activity controls
     document.querySelectorAll('.btn-mock[data-act]').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -111,6 +148,29 @@ class RoomOSClient {
       btnRec.addEventListener('click', () => {
         this.triggerScenario('RECONNECT');
       });
+    }
+  }
+
+  updateAxisLabels() {
+    if (!this.canvasLabels) return;
+    if (this.currentChartMode === 'spectrum') {
+      this.canvasLabels.innerHTML = `
+        <span>-Nsr (Subcarrier 0)</span>
+        <span>DC / Center Pilot</span>
+        <span>+Nsr (Subcarrier 63)</span>
+      `;
+    } else if (this.currentChartMode === 'wave') {
+      this.canvasLabels.innerHTML = `
+        <span>-10s Dynamic History</span>
+        <span>Multipath Perturbation (EKG Stream)</span>
+        <span>LIVE (0s)</span>
+      `;
+    } else if (this.currentChartMode === 'waterfall') {
+      this.canvasLabels.innerHTML = `
+        <span>Earlier Slices</span>
+        <span>Subcarrier Doppler Reflection Spectrogram</span>
+        <span>Latest Slice</span>
+      `;
     }
   }
 
@@ -275,14 +335,19 @@ class RoomOSClient {
       }
     }
 
-    // Subcarriers Canvas
-    if (data.subcarriers && data.subcarriers.length > 0) {
-      this.metaSubcarriers.textContent = `${data.subcarriers.length} Subcarriers`;
-      this.renderCSIWaveform(data.subcarriers);
-    } else {
-      this.metaSubcarriers.textContent = `0 Subcarriers`;
-      this.renderCSIWaveform([]);
+    // Save cache
+    this.lastTelemetry = data;
+
+    // HUD tags
+    if (this.hudPort) {
+      this.hudPort.textContent = `PORT: ${data.active_port || (state.sensor_status === 'ONLINE' ? 'CONNECTED' : 'AUTO')}`;
     }
+    if (this.hudFps) {
+      this.hudFps.textContent = `RATE: ${(state.packet_rate_hz || 0).toFixed(0)} Hz`;
+    }
+
+    // Canvas Chart Rendering
+    this.renderCSIWaveform(data);
 
     // Why Panel
     this.renderWhyPanel(data.active_anomaly, state);
@@ -315,7 +380,42 @@ class RoomOSClient {
     this.updateSensorHealth(rxOnline, `ESP32 RX: ${rxOnline ? 'ONLINE' : 'DISCONNECTED'}`);
   }
 
-  renderCSIWaveform(amplitudes) {
+  renderCSIWaveform(data) {
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const ctx = this.ctx;
+    const amplitudes = data?.subcarriers || [];
+    const state = data?.state || {};
+
+    if (this.metaSubcarriers) {
+      this.metaSubcarriers.textContent = `${amplitudes.length} Subcarriers`;
+    }
+
+    // Keep history buffers
+    const motion = state.motion_level !== undefined ? Number(state.motion_level) : 0;
+    this.waveHistory.push(motion);
+    if (this.waveHistory.length > this.maxWaveHistory) {
+      this.waveHistory.shift();
+    }
+
+    if (amplitudes.length > 0) {
+      this.waterfallHistory.push([...amplitudes]);
+      if (this.waterfallHistory.length > this.maxWaterfallHistory) {
+        this.waterfallHistory.shift();
+      }
+    }
+
+    // Dispatch by active mode
+    if (this.currentChartMode === 'wave') {
+      this.renderRollingWave(state);
+    } else if (this.currentChartMode === 'waterfall') {
+      this.renderWaterfall(amplitudes);
+    } else {
+      this.renderSpectrumAndBaseline(amplitudes, data?.baseline, data?.reliable_subcarriers);
+    }
+  }
+
+  renderSpectrumAndBaseline(amplitudes, baseline, reliableSubcarriers) {
     const w = this.canvas.width;
     const h = this.canvas.height;
     const ctx = this.ctx;
@@ -324,9 +424,9 @@ class RoomOSClient {
     ctx.fillRect(0, 0, w, h);
 
     // Draw subtle grid lines
-    ctx.strokeStyle = 'rgba(45, 60, 88, 0.2)';
+    ctx.strokeStyle = 'rgba(45, 60, 88, 0.25)';
     ctx.lineWidth = 1;
-    for (let y = 40; y < h; y += 40) {
+    for (let y = 35; y < h; y += 35) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(w, y);
@@ -338,23 +438,43 @@ class RoomOSClient {
       ctx.font = '13px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('WAITING FOR ESP32 CSI STREAM...', w / 2, h / 2);
+      if (this.metaPeak) this.metaPeak.textContent = 'Peak: --';
       return;
     }
 
     const n = amplitudes.length;
     const step = w / (n - 1);
-    const maxVal = Math.max(30, Math.max(...amplitudes) * 1.15);
+    const maxVal = Math.max(30, Math.max(...amplitudes) * 1.15, ...(baseline || [0]) * 1.1);
 
-    // Gradient area fill
+    // 1. Draw Baseline Overlay Curve (if available)
+    if (baseline && baseline.length === n) {
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = i * step;
+        const y = h - (baseline[i] / maxVal) * (h - 30) - 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.shadowColor = 'rgba(251, 191, 36, 0.4)';
+      ctx.shadowBlur = 6;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 2. Gradient area fill for Live CSI
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
-    grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+    grad.addColorStop(1, 'rgba(56, 189, 248, 0.02)');
 
     ctx.beginPath();
     ctx.moveTo(0, h);
     for (let i = 0; i < n; i++) {
       const x = i * step;
-      const y = h - (amplitudes[i] / maxVal) * (h - 20);
+      const y = h - (amplitudes[i] / maxVal) * (h - 30) - 10;
       ctx.lineTo(x, y);
     }
     ctx.lineTo(w, h);
@@ -362,20 +482,204 @@ class RoomOSClient {
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Top crisp line
+    // 3. Top crisp neon line for Live CSI
     ctx.beginPath();
+    let peakIdx = 0;
+    let peakAmp = -Infinity;
+
     for (let i = 0; i < n; i++) {
+      const val = amplitudes[i];
+      if (val > peakAmp) {
+        peakAmp = val;
+        peakIdx = i;
+      }
       const x = i * step;
-      const y = h - (amplitudes[i] / maxVal) * (h - 20);
+      const y = h - (val / maxVal) * (h - 30) - 10;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.2;
     ctx.shadowColor = '#38bdf8';
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 9;
     ctx.stroke();
-    ctx.shadowBlur = 0; // reset
+    ctx.shadowBlur = 0;
+
+    // 4. Highlight Peak Subcarrier
+    if (peakAmp > 0) {
+      const peakX = peakIdx * step;
+      const peakY = h - (peakAmp / maxVal) * (h - 30) - 10;
+      ctx.beginPath();
+      ctx.arc(peakX, peakY, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      if (this.metaPeak) {
+        this.metaPeak.textContent = `Peak: k=${peakIdx} (${peakAmp.toFixed(1)})`;
+      }
+    }
+
+    // 5. Draw Legend (Live CSI vs Calibrated Baseline)
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(14, 14, 10, 3);
+    ctx.fillText('Live CSI Stream', 28, 18);
+
+    if (baseline) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(140, 14, 10, 3);
+      ctx.fillText('Quiet Room Baseline', 154, 18);
+    }
+  }
+
+  renderRollingWave(state) {
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const ctx = this.ctx;
+
+    ctx.fillStyle = '#05080e';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw reference threshold lines
+    ctx.save();
+    ctx.font = '9px "JetBrains Mono", monospace';
+
+    // Baseline Quiet Level (0.15)
+    const yQuiet = h - 0.15 * (h - 40) - 20;
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, yQuiet);
+    ctx.lineTo(w, yQuiet);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.7)';
+    ctx.fillText('QUIET STILLNESS THRESHOLD (0.15)', 12, yQuiet - 4);
+
+    // Motion Detection Threshold (0.40)
+    const yMotion = h - 0.40 * (h - 40) - 20;
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+    ctx.beginPath();
+    ctx.moveTo(0, yMotion);
+    ctx.lineTo(w, yMotion);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.7)';
+    ctx.fillText('HUMAN MOTION BOUNDARY (0.40)', 12, yMotion - 4);
+
+    // Anomaly / Impact Threshold (0.75)
+    const yAnomaly = h - 0.75 * (h - 40) - 20;
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(0, yAnomaly);
+    ctx.lineTo(w, yAnomaly);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+    ctx.fillText('IMPACT SPIKE THRESHOLD (0.75)', 12, yAnomaly - 4);
+    ctx.restore();
+
+    if (this.waveHistory.length < 2) {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+      ctx.font = '13px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('BUFFERING REALTIME OSCILLOSCOPE WAVE...', w / 2, h / 2);
+      return;
+    }
+
+    const n = this.waveHistory.length;
+    const step = w / (this.maxWaveHistory - 1);
+    const startX = w - (n - 1) * step;
+
+    // Fill underneath wave
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+    grad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+
+    ctx.beginPath();
+    ctx.moveTo(startX, h);
+    for (let i = 0; i < n; i++) {
+      const x = startX + i * step;
+      const val = Math.max(0, Math.min(1.0, this.waveHistory[i]));
+      const y = h - val * (h - 40) - 20;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Pulse Line
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = startX + i * step;
+      const val = Math.max(0, Math.min(1.0, this.waveHistory[i]));
+      const y = h - val * (h - 40) - 20;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.4;
+    ctx.shadowColor = '#38bdf8';
+    ctx.shadowBlur = 10;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Current pointer bead
+    const lastVal = this.waveHistory[n - 1];
+    const lastY = h - Math.max(0, Math.min(1.0, lastVal)) * (h - 40) - 20;
+    ctx.beginPath();
+    ctx.arc(w - 2, lastY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#38bdf8';
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  renderWaterfall(amplitudes) {
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const ctx = this.ctx;
+
+    ctx.fillStyle = '#05080e';
+    ctx.fillRect(0, 0, w, h);
+
+    if (this.waterfallHistory.length === 0) {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+      ctx.font = '13px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('ACCUMULATING SPECTROGRAM TIME SLICES...', w / 2, h / 2);
+      return;
+    }
+
+    const rows = this.waterfallHistory.length;
+    const rowH = h / this.maxWaterfallHistory;
+    const maxVal = 40;
+
+    for (let r = 0; r < rows; r++) {
+      const slice = this.waterfallHistory[r];
+      const cols = slice.length;
+      const colW = w / cols;
+      const y = (rows - 1 - r) * rowH;
+
+      for (let c = 0; c < cols; c++) {
+        const val = slice[c] || 0;
+        const norm = Math.min(1.0, val / maxVal);
+        ctx.fillStyle = this.getHeatmapColor(norm);
+        ctx.fillRect(c * colW, y, colW + 0.5, rowH + 0.5);
+      }
+    }
+  }
+
+  getHeatmapColor(t) {
+    // Jet/Thermal color gradient: Deep Navy -> Electric Cyan -> Purple -> Amber -> White
+    if (t < 0.2) return `rgba(11, 20, 38, ${0.4 + t * 2})`;
+    if (t < 0.45) return `rgba(6, 182, 212, ${0.5 + (t - 0.2) * 2})`;
+    if (t < 0.7) return `rgba(139, 92, 246, ${0.7 + (t - 0.45) * 1})`;
+    if (t < 0.9) return `rgba(245, 158, 11, 0.9)`;
+    return `rgba(255, 255, 255, 1.0)`;
   }
 
   renderWhyPanel(anomaly, state) {

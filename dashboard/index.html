@@ -145,19 +145,32 @@
       <!-- LIVE CSI SENSING -->
       <section class="panel csi-panel">
         <div class="panel-header">
-          <h2>LIVE CSI SUBCARRIER SPECTRUM</h2>
+          <div class="csi-header-left">
+            <h2>LIVE CSI SENSING</h2>
+            <div class="chart-view-tabs" id="chart-tabs">
+              <button class="chart-tab active" data-chart="spectrum">Spectrum & Baseline</button>
+              <button class="chart-tab" data-chart="wave">Multipath Wave (EKG)</button>
+              <button class="chart-tab" data-chart="waterfall">Subcarrier Heatmap</button>
+            </div>
+          </div>
           <div class="csi-meta">
             <span id="meta-subcarriers">64 Subcarriers</span> |
-            <span id="meta-disturbance">Disturbance: 1.0x</span>
+            <span id="meta-disturbance">Disturbance: 1.0x</span> |
+            <span id="meta-peak">Peak: --</span>
           </div>
         </div>
 
         <div class="canvas-wrapper">
-          <canvas id="csi-canvas" width="600" height="220"></canvas>
-          <div class="canvas-labels">
-            <span>-Nsr (Low Freq)</span>
-            <span>Center Pilot</span>
-            <span>+Nsr (High Freq)</span>
+          <canvas id="csi-canvas" width="600" height="230"></canvas>
+          <div class="canvas-labels" id="canvas-labels">
+            <span>-Nsr (Subcarrier 0)</span>
+            <span>DC / Center Pilot</span>
+            <span>+Nsr (Subcarrier 63)</span>
+          </div>
+          <div class="chart-hud-overlay" id="chart-hud">
+            <span class="hud-tag" id="hud-mode">MODE: SPECTRUM</span>
+            <span class="hud-tag" id="hud-port">PORT: AUTO</span>
+            <span class="hud-tag" id="hud-fps">RATE: -- Hz</span>
           </div>
         </div>
 

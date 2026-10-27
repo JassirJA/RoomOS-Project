@@ -256,6 +256,10 @@ class SubcarrierReliabilityEngine:
 
         self.is_computed = True
 
+    @property
+    def reliable_indices(self) -> List[int]:
+        return [int(i) for i in np.where(self.mask)[0]]
+
     def get_mask(self) -> np.ndarray:
         return self.mask
 

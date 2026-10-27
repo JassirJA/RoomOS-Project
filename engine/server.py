@@ -148,12 +148,22 @@ async def broadcast_loop():
             continue
 
         state = runtime.state_manager.get_state()
+        baseline_amplitudes = None
+        if runtime.baseline_engine.is_ready and runtime.baseline_engine.mean_amplitudes is not None:
+            try:
+                baseline_amplitudes = [float(x) for x in runtime.baseline_engine.mean_amplitudes]
+            except Exception:
+                baseline_amplitudes = None
+
         payload = {
             "type": "TELEMETRY",
             "state": state,
             "subcarriers": runtime.latest_subcarrier_amplitudes,
             "phases": runtime.latest_subcarrier_phases,
             "features": runtime.latest_features,
+            "baseline": baseline_amplitudes,
+            "reliable_subcarriers": runtime.subcarrier_reliability.reliable_indices if runtime.subcarrier_reliability.is_computed else list(range(64)),
+            "active_port": getattr(runtime.ingest_source, 'port', None) or 'AUTO',
             "is_calibrating": runtime.baseline_engine.is_calibrating,
             "active_anomaly": runtime.anomaly_engine.active_anomaly,
             "trajectory": runtime.temporal_engine.get_recent_trajectory(),

@@ -75,26 +75,42 @@ class SerialClient:
 
         rate_window_start = time.time()
         packets_in_window = 0
+        candidate_ports = []
+        candidate_idx = 0
+        port_open_time = 0.0
+        verified_rx_port = None
 
         while self._running:
             active_port = self.port
-            if not active_port and hasattr(serial, 'tools') and hasattr(serial.tools, 'list_ports'):
-                ports = list(serial.tools.list_ports.comports())
-                # Prioritize common ESP32 USB UART bridges
-                for p in ports:
-                    desc = (p.description or "").lower()
-                    hwid = (p.hwid or "").lower()
-                    if any(k in desc or k in hwid for k in ["cp210", "ch340", "ch341", "ftdi", "uart", "usb", "espressif"]):
-                        if "bluetooth" not in desc:
-                            active_port = p.device
-                            break
-                if not active_port and ports:
+
+            # Auto-detect port if not explicitly configured
+            if not active_port:
+                if verified_rx_port:
+                    active_port = verified_rx_port
+                elif hasattr(serial, 'tools') and hasattr(serial.tools, 'list_ports'):
+                    ports = list(serial.tools.list_ports.comports())
+                    detected = []
+                    # Filter out Bluetooth and find ESP32 USB UART bridges
                     for p in ports:
-                        if "bluetooth" not in (p.description or "").lower():
-                            active_port = p.device
-                            break
+                        desc = (p.description or "").lower()
+                        hwid = (p.hwid or "").lower()
+                        if "bluetooth" in desc or "bth" in hwid:
+                            continue
+                        if any(k in desc or k in hwid for k in ["cp210", "ch340", "ch341", "ftdi", "uart", "usb", "espressif", "silicon"]):
+                            detected.append(p.device)
+
+                    if not detected:
+                        for p in ports:
+                            if "bluetooth" not in (p.description or "").lower():
+                                detected.append(p.device)
+
+                    candidate_ports = detected
+                    if candidate_ports:
+                        candidate_idx = candidate_idx % len(candidate_ports)
+                        active_port = candidate_ports[candidate_idx]
 
             if not active_port:
+                self.is_connected = False
                 if self.on_disconnect:
                     self.on_disconnect("Waiting for ESP32 Receiver to be plugged in via USB...")
                 time.sleep(2.0)
@@ -102,30 +118,49 @@ class SerialClient:
 
             if self._serial is None or not self._serial.is_open:
                 try:
+                    logger.info(f"Opening candidate serial port {active_port} @ {self.baudrate} baud...")
                     self._serial = serial.Serial(
                         port=active_port,
                         baudrate=self.baudrate,
-                        timeout=1.0,
+                        timeout=0.5,
                         bytesize=8,
                         parity="N",
                         stopbits=1
                     )
+                    port_open_time = time.time()
                     self.is_connected = True
-                    logger.info(f"Connected to ESP32 on {active_port}")
+                    logger.info(f"Port {active_port} opened. Listening for CSI stream...")
                     if self.on_connect:
                         self.on_connect(active_port)
                 except Exception as e:
                     self.is_connected = False
                     if self.on_disconnect:
                         self.on_disconnect(f"Searching for ESP32 on {active_port}: {e}")
+                    if not self.port and candidate_ports and len(candidate_ports) > 1:
+                        candidate_idx = (candidate_idx + 1) % len(candidate_ports)
                     time.sleep(2.0)
                     continue
 
             try:
                 raw_bytes = self._serial.readline()
+                now = time.time()
+
                 if not raw_bytes:
-                    # Timeout check: If no packet received for > 4.0s
-                    if (time.time() - self.last_packet_time) > 4.0 and self.is_connected and self.last_packet_time > 0:
+                    # If auto-probing and no data after 3.0s, switch to next candidate port
+                    if not self.port and not verified_rx_port and candidate_ports and len(candidate_ports) > 1:
+                        if (now - port_open_time) > 3.0 and self.packet_count == 0:
+                            logger.info(f"Port {active_port} idle (no CSI frames). Probing next port...")
+                            try:
+                                self._serial.close()
+                            except Exception:
+                                pass
+                            self._serial = None
+                            self.is_connected = False
+                            candidate_idx = (candidate_idx + 1) % len(candidate_ports)
+                            continue
+
+                    # Watchdog timeout check: If no packet received for > 4.0s on active stream
+                    if (now - self.last_packet_time) > 4.0 and self.is_connected and self.last_packet_time > 0:
                         self.is_connected = False
                         self.packet_rate_hz = 0.0
                         if self.on_disconnect:
@@ -136,7 +171,12 @@ class SerialClient:
                 if not line:
                     continue
 
-                now = time.time()
+                # Lock onto verified RX port once CSI or Room OS frame is identified
+                if line.startswith("CSI_DATA") or line.startswith("ROOM_OS_HEALTH"):
+                    if not verified_rx_port:
+                        verified_rx_port = active_port
+                        logger.info(f"LOCK ON: ESP32 CSI Receiver verified on {active_port}!")
+
                 self.last_packet_time = now
                 self.packet_count += 1
                 packets_in_window += 1
@@ -157,9 +197,10 @@ class SerialClient:
                     self.on_line_received(line)
 
             except (serial.SerialException, TypeError, OSError) as e:
-                logger.warning(f"Serial disconnection or port error on {self.port}: {e}")
+                logger.warning(f"Serial disconnection or port error on {active_port}: {e}")
                 self.is_connected = False
                 self.packet_rate_hz = 0.0
+                verified_rx_port = None
                 if self.on_disconnect:
                     self.on_disconnect(str(e))
                 if self._serial:
@@ -168,6 +209,8 @@ class SerialClient:
                     except Exception:
                         pass
                 self._serial = None
+                if not self.port and candidate_ports and len(candidate_ports) > 1:
+                    candidate_idx = (candidate_idx + 1) % len(candidate_ports)
                 time.sleep(1.0)
             except Exception as e:
                 logger.error(f"Unexpected error in serial read loop: {e}")

@@ -87,3 +87,7 @@ docs/docusaurus/website/node_modules
 **/managed_components/
 **/*.lock
 **/.vscode
+
+# Local hardware test drivers
+tools/drivers_cp210x/
+install_driver.bat

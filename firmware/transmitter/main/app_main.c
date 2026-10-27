@@ -25,17 +25,17 @@
 #endif
 
 #ifndef CONFIG_ROOM_OS_TX_RATE_HZ
-#define CONFIG_ROOM_OS_TX_RATE_HZ 100
+#define CONFIG_ROOM_OS_TX_RATE_HZ 30
 #endif
 
-#if defined(CONFIG_ROOM_OS_WIFI_BW_HT20)
-#define ROOM_OS_BANDWIDTH WIFI_BW_HT20
-#define ROOM_OS_SECOND_CHAN WIFI_SECOND_CHAN_NONE
-#define ROOM_OS_PHY_MODE WIFI_PHY_MODE_HT20
-#else
+#if defined(CONFIG_ROOM_OS_WIFI_BW_HT40)
 #define ROOM_OS_BANDWIDTH WIFI_BW_HT40
 #define ROOM_OS_SECOND_CHAN WIFI_SECOND_CHAN_BELOW
 #define ROOM_OS_PHY_MODE WIFI_PHY_MODE_HT40
+#else
+#define ROOM_OS_BANDWIDTH WIFI_BW_HT20
+#define ROOM_OS_SECOND_CHAN WIFI_SECOND_CHAN_NONE
+#define ROOM_OS_PHY_MODE WIFI_PHY_MODE_HT20
 #endif
 
 static const char *TAG = "ROOM_OS_TX";
@@ -71,13 +71,13 @@ static void wifi_init_transmitter(void)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_mac(WIFI_IF_STA, ROOM_OS_TX_MAC));
 
     ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_STA, ROOM_OS_BANDWIDTH));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
     ESP_ERROR_CHECK(esp_wifi_set_channel(CONFIG_ROOM_OS_WIFI_CHANNEL, ROOM_OS_SECOND_CHAN));
-    ESP_ERROR_CHECK(esp_wifi_set_mac(WIFI_IF_STA, ROOM_OS_TX_MAC));
 
 #if defined(CONFIG_ROOM_OS_TX_POWER_MAX)
     // 20dBm maximum transmit power

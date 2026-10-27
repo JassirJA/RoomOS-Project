@@ -51,8 +51,12 @@ class TemporalContextEngine:
     """Tracks sequence of activities, temporal consistency, and state durations."""
 
     def __init__(self, debounce_frames: int = 5):
-        self.debounce_frames = debounce_frames
-        self.recent_predictions: deque = deque(maxlen=debounce_frames)
+        self.debounce_frames = max(1, debounce_frames)
+        self.recent_predictions: deque = deque(maxlen=self.debounce_frames)
+
+    def set_debounce_frames(self, frames: int):
+        self.debounce_frames = max(1, frames)
+        self.recent_predictions = deque(self.recent_predictions, maxlen=self.debounce_frames)
 
         # Current stabilized state
         self.current_activity: str = ActivityLabels.UNKNOWN

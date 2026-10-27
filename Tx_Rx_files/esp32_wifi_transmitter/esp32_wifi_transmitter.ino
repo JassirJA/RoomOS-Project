@@ -14,7 +14,7 @@
 /*                         RF TRANSMISSION SETTINGS                          */
 /* ========================================================================= */
 #define WIFI_CHANNEL        11    // 2.4GHz Wi-Fi Channel (1 to 14)
-#define TX_RATE_HZ          15    // Packets per second (15 Hz = ~66.7ms interval)
+#define TX_RATE_HZ          50    // Packets per second (50 Hz = ~20.0ms interval)
 #define BUILTIN_LED_PIN     2     // Built-in LED on ESP32 DevKit V1
 /* ========================================================================= */
 
