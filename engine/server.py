@@ -28,6 +28,7 @@ app = FastAPI(title="Room OS — Room Intelligence Runtime", version="1.0.0")
 # Global runtime instance
 runtime: Optional[RoomOSRuntime] = None
 connected_websockets: Set[WebSocket] = set()
+main_asyncio_loop: Optional[asyncio.AbstractEventLoop] = None
 
 DASHBOARD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dashboard")
 
@@ -142,6 +143,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
 async def broadcast_loop():
     """Streams live state + subcarrier spectrum to UI at 15 Hz."""
+    global main_asyncio_loop
+    if main_asyncio_loop is None:
+        try:
+            main_asyncio_loop = asyncio.get_running_loop()
+        except Exception:
+            pass
     while True:
         await asyncio.sleep(1.0 / 15.0)  # 15 fps
         if not connected_websockets or runtime is None:
@@ -194,8 +201,8 @@ def forward_event_to_websockets(event_type: str, data: Any):
     msg = json.dumps({"type": "EVENT", "event": event_type, "data": data})
     # Run in asyncio event loop
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
+        loop = main_asyncio_loop
+        if loop and loop.is_running():
             for ws in list(connected_websockets):
                 asyncio.run_coroutine_threadsafe(ws.send_text(msg), loop)
     except Exception:
@@ -234,6 +241,8 @@ def main():
 
     @app.on_event("startup")
     async def on_startup():
+        global main_asyncio_loop
+        main_asyncio_loop = asyncio.get_running_loop()
         asyncio.create_task(broadcast_loop())
 
     @app.on_event("shutdown")

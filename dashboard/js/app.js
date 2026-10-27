@@ -304,6 +304,12 @@ class RoomOSClient {
       this.displacementAlert.style.display = state.device_displaced ? 'flex' : 'none';
     }
 
+    if (this.calibOverlay && this.calibOverlay.classList.contains('active') && !data.is_calibrating) {
+      this.calibProgressFill.style.width = '100%';
+      this.calibStats.textContent = 'ROOM BASELINE READY';
+      setTimeout(() => this.calibOverlay.classList.remove('active'), 500);
+    }
+
     if (this.valGate) {
       const gateOpen = data.baseline_gate_open;
       this.valGate.textContent = gateOpen ? 'OPEN (ADAPTING)' : 'LOCKED (PROTECTED)';
@@ -444,7 +450,8 @@ class RoomOSClient {
 
     const n = amplitudes.length;
     const step = w / (n - 1);
-    const maxVal = Math.max(30, Math.max(...amplitudes) * 1.15, ...(baseline || [0]) * 1.1);
+    const baselineMax = (baseline && baseline.length > 0) ? Math.max(...baseline) * 1.1 : 0;
+    const maxVal = Math.max(30, Math.max(...amplitudes) * 1.15, baselineMax);
 
     // 1. Draw Baseline Overlay Curve (if available)
     if (baseline && baseline.length === n) {
