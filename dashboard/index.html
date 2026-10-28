@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=2.1" />
 </head>
 <body class="room-os-theme">
   <!-- Top OS Bar -->
@@ -376,29 +376,6 @@
     </div>
   </main>
 
-  <!-- Phone Remote QR Modal -->
-  <div class="remote-modal-overlay" id="remote-modal-overlay">
-    <div class="remote-modal">
-      <button class="modal-close-btn" id="remote-modal-close-btn">&times;</button>
-      <div class="remote-modal-header">
-        <span class="remote-icon">📱</span>
-        <h3>WIRELESS PHONE CONTROLLER</h3>
-        <p>Scan this QR code with your phone camera to control gestures wirelessly during your live demo!</p>
-      </div>
-      <div class="qr-container">
-        <img id="remote-qr-img" src="/api/remote/qr" alt="Scan QR Code" />
-      </div>
-      <div class="remote-url-badge">
-        <span class="badge-label">OR OPEN BROWSER ON PHONE:</span>
-        <code id="remote-url-text">http://10.186.203.239:8050/remote</code>
-      </div>
-      <div class="remote-tips">
-        <div class="tip-item">⚡ <strong>Zero Lag (&lt;15ms)</strong>: Tapping any gesture on your phone instantly updates this laptop screen.</div>
-        <div class="tip-item">📶 <strong>Same Wi-Fi</strong>: Ensure phone and laptop are on the same Wi-Fi or laptop mobile hotspot.</div>
-      </div>
-    </div>
-  </div>
-
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=2.1"></script>
 </body>
 </html>

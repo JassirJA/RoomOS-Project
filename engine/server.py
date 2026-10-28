@@ -272,6 +272,7 @@ async def trigger_mock_scenario(req: MockScenarioRequest):
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_websockets.add(websocket)
+    ensure_broadcast_loop()
     try:
         while True:
             # Client can send control messages or keep-alive pings
@@ -294,10 +295,39 @@ async def websocket_endpoint(websocket: WebSocket):
             except Exception:
                 pass
     except WebSocketDisconnect:
-        connected_websockets.remove(websocket)
+        connected_websockets.discard(websocket)
     except Exception:
-        if websocket in connected_websockets:
-            connected_websockets.remove(websocket)
+        connected_websockets.discard(websocket)
+
+def json_safe(obj):
+    if hasattr(obj, 'item'):
+        return obj.item()
+    if hasattr(obj, 'tolist'):
+        return obj.tolist()
+    if isinstance(obj, (np.floating, float)):
+        return float(obj)
+    if isinstance(obj, (np.integer, int)):
+        return int(obj)
+    if isinstance(obj, (np.bool_, bool)):
+        return bool(obj)
+    return str(obj)
+
+_cached_detected_port = "COM5"
+_last_port_check_time = 0.0
+
+def get_detected_port():
+    global _cached_detected_port, _last_port_check_time
+    now = time.time()
+    if now - _last_port_check_time > 5.0:
+        _last_port_check_time = now
+        try:
+            import serial.tools.list_ports
+            valid_ports = [p.device for p in serial.tools.list_ports.comports() if 'Bluetooth' not in (p.description or '')]
+            if valid_ports:
+                _cached_detected_port = valid_ports[0]
+        except Exception:
+            pass
+    return _cached_detected_port
 
 async def broadcast_loop():
     """Streams live state + subcarrier spectrum to UI at 15 Hz."""
@@ -312,66 +342,76 @@ async def broadcast_loop():
         if not connected_websockets or runtime is None:
             continue
 
-        state = runtime.state_manager.get_state()
-        baseline_amplitudes = None
-        if runtime.baseline_engine.is_ready and runtime.baseline_engine.mean_amplitudes is not None:
-            try:
-                baseline_amplitudes = [float(x) for x in runtime.baseline_engine.mean_amplitudes]
-            except Exception:
-                baseline_amplitudes = None
-
-        # Hardware port auto-detection for live presentation appearance
-        detected_port = "COM5"
         try:
-            import serial.tools.list_ports
-            valid_ports = [p.device for p in serial.tools.list_ports.comports() if 'Bluetooth' not in (p.description or '')]
-            if valid_ports:
-                detected_port = valid_ports[0]
+            state = runtime.state_manager.get_state()
+            baseline_amplitudes = None
+            if runtime.baseline_engine.is_ready and runtime.baseline_engine.mean_amplitudes is not None:
+                try:
+                    baseline_amplitudes = [float(x) for x in runtime.baseline_engine.mean_amplitudes]
+                except Exception:
+                    baseline_amplitudes = None
+
+            detected_port = get_detected_port()
+            state["sensor_status"] = "ONLINE"
+            if not state.get("status_message") or "disconnected" in str(state.get("status_message")).lower():
+                state["status_message"] = f"ESP32 Receiver Connected on {detected_port} @ 921600 baud"
+
+            payload = {
+                "type": "TELEMETRY",
+                "state": state,
+                "subcarriers": runtime.latest_subcarrier_amplitudes,
+                "phases": runtime.latest_subcarrier_phases,
+                "features": runtime.latest_features,
+                "baseline": baseline_amplitudes,
+                "reliable_subcarriers": runtime.subcarrier_reliability.reliable_indices if runtime.subcarrier_reliability.is_computed else list(range(64)),
+                "active_port": getattr(runtime.ingest_source, 'port', None) or detected_port,
+                "is_calibrating": runtime.baseline_engine.is_calibrating,
+                "active_anomaly": runtime.anomaly_engine.active_anomaly,
+                "trajectory": runtime.temporal_engine.get_recent_trajectory(),
+                "subcarrier_reliability": runtime.subcarrier_reliability.to_dict() if runtime.subcarrier_reliability.is_computed else None,
+                "probe_state": runtime.verification_controller.state.value if hasattr(runtime.verification_controller.state, 'value') else str(runtime.verification_controller.state),
+                "probe_result": runtime.verification_controller.last_result.to_dict() if runtime.verification_controller.last_result else None,
+                "baseline_gate_open": runtime.baseline_engine.gate.is_open,
+                "drift_classification": runtime.baseline_engine.drift_classification.value if hasattr(runtime.baseline_engine.drift_classification, 'value') else str(runtime.baseline_engine.drift_classification),
+                "drift_score": runtime.baseline_engine.drift_score,
+                "appliances": appliance_state
+            }
+            text = json.dumps(payload, default=json_safe)
+
+            # Broadcast to all open client sockets
+            to_remove = set()
+            for ws in list(connected_websockets):
+                try:
+                    await ws.send_text(text)
+                except Exception:
+                    to_remove.add(ws)
+
+            for ws in to_remove:
+                connected_websockets.discard(ws)
+        except Exception as e:
+            logger.error(f"Error in broadcast_loop: {e}")
+
+broadcast_task = None
+
+def ensure_broadcast_loop():
+    global broadcast_task, main_asyncio_loop
+    if main_asyncio_loop is None:
+        try:
+            main_asyncio_loop = asyncio.get_running_loop()
         except Exception:
             pass
-
-        state["sensor_status"] = "ONLINE"
-        if not state.get("status_message") or "disconnected" in str(state.get("status_message")).lower():
-            state["status_message"] = f"ESP32 Receiver Connected on {detected_port} @ 921600 baud"
-
-        payload = {
-            "type": "TELEMETRY",
-            "state": state,
-            "subcarriers": runtime.latest_subcarrier_amplitudes,
-            "phases": runtime.latest_subcarrier_phases,
-            "features": runtime.latest_features,
-            "baseline": baseline_amplitudes,
-            "reliable_subcarriers": runtime.subcarrier_reliability.reliable_indices if runtime.subcarrier_reliability.is_computed else list(range(64)),
-            "active_port": getattr(runtime.ingest_source, 'port', None) or detected_port,
-            "is_calibrating": runtime.baseline_engine.is_calibrating,
-            "active_anomaly": runtime.anomaly_engine.active_anomaly,
-            "trajectory": runtime.temporal_engine.get_recent_trajectory(),
-            "subcarrier_reliability": runtime.subcarrier_reliability.to_dict() if runtime.subcarrier_reliability.is_computed else None,
-            "probe_state": runtime.verification_controller.state.value,
-            "probe_result": runtime.verification_controller.last_result.to_dict() if runtime.verification_controller.last_result else None,
-            "baseline_gate_open": runtime.baseline_engine.gate.is_open,
-            "drift_classification": runtime.baseline_engine.drift_classification.value,
-            "drift_score": runtime.baseline_engine.drift_score,
-            "appliances": appliance_state
-        }
-        text = json.dumps(payload)
-
-        # Broadcast to all open client sockets
-        to_remove = set()
-        for ws in connected_websockets:
-            try:
-                await ws.send_text(text)
-            except Exception:
-                to_remove.add(ws)
-
-        for ws in to_remove:
-            connected_websockets.discard(ws)
+    if broadcast_task is None or broadcast_task.done():
+        logger.info("Starting 15 Hz TELEMETRY broadcast loop...")
+        broadcast_task = asyncio.create_task(broadcast_loop())
 
 def forward_event_to_websockets(event_type: str, data: Any):
-    """Event bus listener that forwards domain events to active websockets."""
+    """Event bus listener that forwards meaningful domain events to active websockets."""
     if not connected_websockets:
         return
-    msg = json.dumps({"type": "EVENT", "event": event_type, "data": data})
+    # Exclude per-packet 96 Hz state dumps that flood the browser
+    if event_type == "STATE_CHANGED":
+        return
+    msg = json.dumps({"type": "EVENT", "event": event_type, "data": data}, default=json_safe)
     # Run in asyncio event loop
     try:
         loop = main_asyncio_loop

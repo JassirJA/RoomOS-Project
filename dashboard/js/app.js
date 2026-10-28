@@ -927,6 +927,9 @@ class RoomOSClient {
     const timeStr = new Date().toTimeString().split(' ')[0];
     entry.textContent = `${timeStr}  [${eventName}]`;
     this.memoryLogList.prepend(entry);
+    while (this.memoryLogList.children.length > 15) {
+      this.memoryLogList.removeChild(this.memoryLogList.lastChild);
+    }
 
     if (eventName === 'CALIBRATION_STARTED') {
       this.calibOverlay.classList.add('active');
