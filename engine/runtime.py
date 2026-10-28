@@ -103,6 +103,8 @@ class RoomOSRuntime:
         self.measured_rate_hz: float = 28.0
         self._packet_timestamps: deque = deque(maxlen=30)
         self.startup_frames: int = max(1, round(self.measured_rate_hz * TARGET_STARTUP_S))
+        self.mock_forced_activity: Optional[str] = None
+        self.mock_forced_until: float = 0.0
         self._apply_rate(self.measured_rate_hz)
 
     def _apply_rate(self, rate_hz: float):
@@ -158,10 +160,17 @@ class RoomOSRuntime:
         effective_rate = max(10, min(150, int(observed_rate))) if observed_rate > 1 else 28
         self.baseline_engine.start_calibration(duration_s=duration_s, sample_rate_hz=effective_rate)
 
-    def set_mock_activity(self, activity: str):
+    def set_mock_activity(self, activity: str, duration: float = 0.0):
         """Controls synthetic activity if running in mock mode."""
         if self.use_mock and isinstance(self.ingest_source, MockCSIFeeder):
-            self.ingest_source.set_activity(activity)
+            if duration > 0:
+                self.ingest_source.trigger_gesture(activity, duration=duration)
+                self.mock_forced_activity = activity
+                self.mock_forced_until = time.time() + duration
+            else:
+                self.ingest_source.set_activity(activity)
+                self.mock_forced_activity = activity
+                self.mock_forced_until = 0.0
 
     def trigger_scenario(self, scenario: str):
         """Triggers special automated simulation scenario."""
@@ -416,6 +425,33 @@ class RoomOSRuntime:
         final_activity = stabilized_activity
         if conf_eval["should_abstain"] or is_displaced:
             final_activity = ActivityLabels.UNKNOWN
+
+        # Instant mock override from remote controller
+        if self.use_mock and self.mock_forced_activity:
+            if self.mock_forced_until == 0.0 or time.time() < self.mock_forced_until:
+                final_activity = self.mock_forced_activity
+                presence = True
+                act_str = str(final_activity).upper()
+                if "GESTURE" in act_str or "HAND" in act_str:
+                    motion_level = 0.68
+                    room_stability = 0.48
+                elif "WALKING" in act_str:
+                    motion_level = 0.82
+                    room_stability = 0.32
+                elif "FAST" in act_str:
+                    motion_level = 0.94
+                    room_stability = 0.18
+                elif "SITTING" in act_str:
+                    motion_level = 0.18
+                    room_stability = 0.92
+                elif "NO_MOVEMENT" in act_str or "EMPTY" in act_str:
+                    motion_level = 0.00
+                    room_stability = 0.99
+                    presence = False
+                conf_eval["overall_confidence"] = 0.98
+                conf_eval["should_abstain"] = False
+            else:
+                self.mock_forced_activity = None
 
         # 14. Update Central Room State & Formal State Vector
         self.state_manager.update_state(

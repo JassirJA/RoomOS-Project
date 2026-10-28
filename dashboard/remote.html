@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Room OS — Mobile Gesture Remote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090c13;
+      --card-bg: #111726;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-active-border: rgba(0, 240, 255, 0.5);
+      --text: #f0f4fc;
+      --text-muted: #8b9bb4;
+      --cyan: #00f0ff;
+      --cyan-glow: rgba(0, 240, 255, 0.25);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.25);
+      --purple: #c084fc;
+      --purple-glow: rgba(192, 132, 252, 0.25);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.25);
+      --rose: #f43f5e;
+      --rose-glow: rgba(244, 63, 94, 0.3);
+      --font-main: 'Outfit', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(circle at 10% 10%, rgba(0, 240, 255, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 90% 90%, rgba(192, 132, 252, 0.06) 0%, transparent 40%);
+      color: var(--text);
+      font-family: var(--font-main);
+      padding: 16px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-icon {
+      font-size: 1.3rem;
+    }
+
+    .brand-title {
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-title span {
+      color: var(--cyan);
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--emerald);
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Active Banner */
+    .active-banner {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .active-label {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .active-val {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Mode Switcher */
+    .mode-bar {
+      display: flex;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 4px;
+      gap: 6px;
+    }
+
+    .mode-btn {
+      flex: 1;
+      padding: 10px 8px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-main);
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .mode-btn.active {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Section Headers */
+    .section-title {
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Buttons Grid */
+    .btn-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .card-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-btn:active {
+      transform: scale(0.96);
+    }
+
+    .card-btn .icon {
+      font-size: 1.8rem;
+      margin-bottom: 2px;
+    }
+
+    .card-btn .title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+
+    .card-btn .desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.25;
+    }
+
+    /* Active & Highlight States */
+    .card-btn.active-gesture {
+      border-color: var(--cyan);
+      background: rgba(0, 240, 255, 0.08);
+      box-shadow: 0 0 16px var(--cyan-glow);
+    }
+
+    .card-btn.gesture-1 { border-left: 4px solid var(--cyan); }
+    .card-btn.gesture-2 { border-left: 4px solid var(--emerald); }
+    .card-btn.gesture-3 { border-left: 4px solid var(--purple); }
+    .card-btn.gesture-4 { border-left: 4px solid var(--amber); }
+
+    .card-btn.gesture-1:active { background: var(--cyan-glow); }
+    .card-btn.gesture-2:active { background: var(--emerald-glow); }
+    .card-btn.gesture-3:active { background: var(--purple-glow); }
+    .card-btn.gesture-4:active { background: var(--amber-glow); }
+
+    /* Single Column Activities */
+    .act-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .act-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      color: var(--text);
+      font-family: var(--font-main);
+      font-weight: 600;
+      font-size: 0.88rem;
+      transition: all 0.15s ease;
+    }
+
+    .act-btn:active {
+      transform: scale(0.96);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .act-btn.active {
+      border-color: var(--emerald);
+      color: var(--emerald);
+      background: rgba(16, 185, 129, 0.1);
+    }
+
+    /* Fall Anomaly Emergency Button */
+    .fall-btn {
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(244, 63, 94, 0.05) 100%);
+      border: 1.5px solid var(--rose);
+      color: var(--rose);
+      padding: 16px;
+      border-radius: 16px;
+      font-family: var(--font-main);
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      box-shadow: 0 4px 20px var(--rose-glow);
+      transition: all 0.15s ease;
+    }
+
+    .fall-btn:active {
+      transform: scale(0.97);
+      background: var(--rose);
+      color: #fff;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #111726;
+      border: 1px solid var(--cyan);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: 30px;
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      pointer-events: none;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Bar -->
+  <div class="header">
+    <div class="brand">
+      <span class="brand-icon">📡</span>
+      <div class="brand-title">ROOM <span>OS</span></div>
+    </div>
+    <div class="status-pill">
+      <span class="status-dot"></span>
+      <span id="conn-status">LIVE TO LAPTOP</span>
+    </div>
+  </div>
+
+  <!-- Active Status Display -->
+  <div class="active-banner">
+    <div class="active-label">LIVE DASHBOARD CLASSIFICATION</div>
+    <div class="active-val" id="active-banner-text">
+      <span>✨</span>
+      <span id="active-val-name">STILL / NO MOVEMENT</span>
+    </div>
+  </div>
+
+  <!-- Trigger Mode Toggle -->
+  <div class="mode-bar">
+    <button class="mode-btn active" id="mode-pulse" onclick="setMode('pulse')">
+      ⚡ Auto-Pulse (4s Demo)
+    </button>
+    <button class="mode-btn" id="mode-hold" onclick="setMode('hold')">
+      🔒 Hold Continuous
+    </button>
+  </div>
+
+  <!-- Gestures Section -->
+  <div class="section-title">⚡ SMART APPLIANCE GESTURES (2 GESTURES)</div>
+  <div class="btn-grid">
+    <button class="card-btn gesture-1" id="remote-btn-fan" onclick="triggerGesture('GESTURE 1: FAN TOGGLE', 'GESTURE 1: SMART FAN TOGGLED')">
+      <div class="icon">🌀</div>
+      <div class="title" style="color: var(--cyan)">Gesture 1: Fan</div>
+      <div class="desc">Wave across link • Toggles Fan (Buzzer)</div>
+      <div style="margin-top: 6px;"><span class="appliance-status-pill offline" id="remote-fan-pill">FAN: OFF</span></div>
+    </button>
+
+    <button class="card-btn gesture-2" id="remote-btn-light" onclick="triggerGesture('GESTURE 2: LIGHT TOGGLE', 'GESTURE 2: SMART LIGHT TOGGLED')">
+      <div class="icon">💡</div>
+      <div class="title" style="color: var(--amber)">Gesture 2: Light</div>
+      <div class="desc">Push toward antenna • Toggles Light</div>
+      <div style="margin-top: 6px;"><span class="appliance-status-pill offline" id="remote-light-pill">LIGHT: OFF</span></div>
+    </button>
+  </div>
+
+  <!-- Room Activities Section -->
+  <div class="section-title">🏃 ROOM ACTIVITIES</div>
+  <div class="act-grid">
+    <button class="act-btn" onclick="triggerGesture('WALKING', 'WALKING')">
+      <span>🚶</span> Walking
+    </button>
+    <button class="act-btn" onclick="triggerGesture('SITTING', 'SITTING')">
+      <span>🪑</span> Sitting (Breath)
+    </button>
+    <button class="act-btn" onclick="triggerGesture('NO_MOVEMENT', 'STILL / NO MOVEMENT')">
+      <span>🧘</span> Still Room
+    </button>
+    <button class="act-btn" onclick="triggerGesture('FAST_MOVEMENT', 'FAST MOVEMENT')">
+      <span>🏃</span> Fast Motion
+    </button>
+  </div>
+
+  <!-- Fall Anomaly Section -->
+  <div class="section-title">🚨 PATENT INNOVATION DEMO</div>
+  <button class="fall-btn" onclick="triggerFall()">
+    <span>🚨</span> TRIGGER FALL ANOMALY
+  </button>
+
+  <!-- Re-Calibrate Baseline -->
+  <button class="act-btn" style="width: 100%; justify-content: center;" onclick="triggerCalibrate()">
+    <span>🎯</span> Calibrate Room Baseline
+  </button>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <span>✓</span>
+    <span id="toast-text">Action sent to Laptop</span>
+  </div>
+
+  <script>
+    let activeMode = 'pulse'; // 'pulse' or 'hold'
+    let toastTimeout = null;
+
+    function vibrate() {
+      try {
+        if ('vibrate' in navigator) {
+          navigator.vibrate(40);
+        }
+      } catch (e) {}
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toast-text');
+      text.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 1800);
+    }
+
+    function setMode(mode) {
+      activeMode = mode;
+      document.getElementById('mode-pulse').className = mode === 'pulse' ? 'mode-btn active' : 'mode-btn';
+      document.getElementById('mode-hold').className = mode === 'hold' ? 'mode-btn active' : 'mode-btn';
+      vibrate();
+      showToast(mode === 'pulse' ? 'Mode: 4s Auto-Reset' : 'Mode: Continuous Hold');
+    }
+
+    async function triggerGesture(gestureKey, displayName) {
+      vibrate();
+      document.getElementById('active-val-name').textContent = displayName;
+      showToast('Sent: ' + displayName);
+
+      try {
+        const resp = await fetch('/api/remote/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gesture: gestureKey,
+            duration: 4.0,
+            mode: activeMode
+          })
+        });
+        const data = await resp.json();
+        console.log('Triggered:', data);
+      } catch (err) {
+        console.error('Trigger error:', err);
+        showToast('Network error: ' + err.message);
+      }
+    }
+
+    async function triggerFall() {
+      vibrate();
+      document.getElementById('active-val-name').textContent = 'FALL ANOMALY DETECTED';
+      showToast('🚨 Triggering Fall Anomaly Sequence');
+
+      try {
+        await fetch('/api/remote/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gesture: 'FALL',
+            duration: 10.0,
+            mode: 'pulse'
+          })
+        });
+      } catch (err) {
+        console.error('Fall error:', err);
+      }
+    }
+
+    async function triggerCalibrate() {
+      vibrate();
+      document.getElementById('active-val-name').textContent = 'CALIBRATING BASELINE';
+      showToast('🎯 Calibrating Baseline...');
+
+      try {
+        await fetch('/api/remote/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gesture: 'CALIBRATE',
+            duration: 2.0,
+            mode: 'pulse'
+          })
+        });
+      } catch (err) {
+        console.error('Calibrate error:', err);
+      }
+    }
+
+    // Keep active state synchronized with laptop dashboard via periodic polling
+    setInterval(async () => {
+      try {
+        const [stateRes, appRes] = await Promise.all([
+          fetch('/api/state'),
+          fetch('/api/appliances')
+        ]);
+        if (stateRes.ok) {
+          const st = await stateRes.json();
+          if (st.activity) {
+            let act = st.activity.replace(/_/g, ' ');
+            document.getElementById('active-val-name').textContent = act;
+          }
+        }
+        if (appRes.ok) {
+          const apps = await appRes.json();
+          const fanPill = document.getElementById('remote-fan-pill');
+          if (fanPill) {
+            fanPill.textContent = apps.fan ? 'FAN: ON (RUNNING)' : 'FAN: OFF';
+            fanPill.className = apps.fan ? 'appliance-status-pill online' : 'appliance-status-pill offline';
+          }
+          const lightPill = document.getElementById('remote-light-pill');
+          if (lightPill) {
+            lightPill.textContent = apps.light ? 'LIGHT: ON (ILLUMINATED)' : 'LIGHT: OFF';
+            lightPill.className = apps.light ? 'appliance-status-pill online' : 'appliance-status-pill offline';
+          }
+        }
+      } catch (e) {}
+    }, 1000);
+  </script>
+</body>
+</html>

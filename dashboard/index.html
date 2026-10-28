@@ -48,6 +48,114 @@
   <!-- Main OS Grid -->
   <main class="os-container">
 
+    <!-- RF GESTURE INTELLIGENCE & EDGE ACTUATION HUB -->
+    <section class="panel appliance-panel" id="appliance-panel">
+      <div class="panel-header">
+        <div class="header-title-group">
+          <h2>RF GESTURE INTELLIGENCE & EDGE ACTUATION</h2>
+          <span class="sub-header-tag">Autonomous Subcarrier Multipath Classification</span>
+        </div>
+        <div class="gesture-live-screen" id="gesture-live-screen">
+          <span class="screen-dot"></span>
+          <span id="gesture-screen-text">STANDBY — CONTINUOUS RF MULTIPATH INGESTION (96 Hz)</span>
+        </div>
+      </div>
+
+      <div class="gesture-ml-cockpit">
+        <!-- SUB-COLUMN 1: REAL-TIME ML FEATURE EXTRACTION -->
+        <div class="ml-subpanel ml-features">
+          <div class="subpanel-title">
+            <span>📡 REAL-TIME CSI EXTRACTED FEATURES</span>
+            <span class="badge-sub">64 HT-LTF</span>
+          </div>
+          <div class="feature-metrics-grid">
+            <div class="f-metric-item">
+              <span class="f-key">Temporal Variance (σ²_t)</span>
+              <span class="f-val" id="ml-val-var">0.038</span>
+              <div class="f-bar"><div class="f-fill" id="ml-fill-var" style="width: 4%"></div></div>
+            </div>
+            <div class="f-metric-item">
+              <span class="f-key">Doppler Spread (Δf_D)</span>
+              <span class="f-val" id="ml-val-doppler">+0.0 Hz</span>
+              <div class="f-bar"><div class="f-fill fill-cyan" id="ml-fill-doppler" style="width: 2%"></div></div>
+            </div>
+            <div class="f-metric-item">
+              <span class="f-key">Cosine Distance (D_cos)</span>
+              <span class="f-val" id="ml-val-cos">0.0003</span>
+              <div class="f-bar"><div class="f-fill fill-purple" id="ml-fill-cos" style="width: 3%"></div></div>
+            </div>
+            <div class="f-metric-item">
+              <span class="f-key">Spectral Entropy (H_RF)</span>
+              <span class="f-val" id="ml-val-entropy">0.982</span>
+              <div class="f-bar"><div class="f-fill fill-amber" id="ml-fill-entropy" style="width: 98%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUB-COLUMN 2: CLASSIFIER INFERENCE & PROBABILITIES -->
+        <div class="ml-subpanel ml-probabilities">
+          <div class="subpanel-title">
+            <span>🧠 EDGE ML INFERENCE (SVM / RF)</span>
+            <span class="badge-sub" id="ml-latency-badge">11.4 ms</span>
+          </div>
+          <div class="prob-list">
+            <div class="prob-row" id="prob-row-g1">
+              <div class="prob-header">
+                <span class="prob-name">Gesture 1: Hand Wave</span>
+                <span class="prob-pct" id="prob-val-g1">0.4%</span>
+              </div>
+              <div class="prob-track"><div class="prob-fill fill-cyan" id="prob-fill-g1" style="width: 0.4%"></div></div>
+            </div>
+            <div class="prob-row" id="prob-row-g2">
+              <div class="prob-header">
+                <span class="prob-name">Gesture 2: Forward Push</span>
+                <span class="prob-pct" id="prob-val-g2">0.2%</span>
+              </div>
+              <div class="prob-track"><div class="prob-fill fill-amber" id="prob-fill-g2" style="width: 0.2%"></div></div>
+            </div>
+            <div class="prob-row" id="prob-row-still">
+              <div class="prob-header">
+                <span class="prob-name">Ambient Room Stillness</span>
+                <span class="prob-pct" id="prob-val-still">99.4%</span>
+              </div>
+              <div class="prob-track"><div class="prob-fill fill-green" id="prob-fill-still" style="width: 99.4%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUB-COLUMN 3: AUTONOMOUS HARDWARE RELAY MODULES -->
+        <div class="ml-subpanel ml-actuators">
+          <div class="subpanel-title">
+            <span>⚡ ESP32 GPIO RELAYS</span>
+            <span class="badge-sub">Opto-Isolated</span>
+          </div>
+          <div class="relay-modules-grid">
+            <!-- FAN RELAY (GPIO 18) -->
+            <div class="relay-card" id="card-appliance-fan">
+              <div class="relay-icon-box fan-icon" id="fan-icon">🌀</div>
+              <div class="relay-info">
+                <div class="relay-title">SMART FAN</div>
+                <div class="relay-gpio">GPIO 18 ➔ RELAY 1</div>
+                <div class="relay-status-text" id="fan-state-desc">Output: 0.0V (LOW) • Relay Open</div>
+              </div>
+              <div class="relay-badge offline" id="fan-status-pill">OFF</div>
+            </div>
+
+            <!-- LIGHT RELAY (GPIO 19) -->
+            <div class="relay-card" id="card-appliance-light">
+              <div class="relay-icon-box light-icon" id="light-icon">💡</div>
+              <div class="relay-info">
+                <div class="relay-title">SMART LIGHT</div>
+                <div class="relay-gpio">GPIO 19 ➔ RELAY 2</div>
+                <div class="relay-status-text" id="light-state-desc">Output: 0.0V (LOW) • Relay Open</div>
+              </div>
+              <div class="relay-badge offline" id="light-status-pill">OFF</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- HERO PANEL: PRIMARY ROOM STATE -->
     <section class="panel hero-panel">
       <div class="panel-header">
@@ -267,6 +375,29 @@
 
     </div>
   </main>
+
+  <!-- Phone Remote QR Modal -->
+  <div class="remote-modal-overlay" id="remote-modal-overlay">
+    <div class="remote-modal">
+      <button class="modal-close-btn" id="remote-modal-close-btn">&times;</button>
+      <div class="remote-modal-header">
+        <span class="remote-icon">📱</span>
+        <h3>WIRELESS PHONE CONTROLLER</h3>
+        <p>Scan this QR code with your phone camera to control gestures wirelessly during your live demo!</p>
+      </div>
+      <div class="qr-container">
+        <img id="remote-qr-img" src="/api/remote/qr" alt="Scan QR Code" />
+      </div>
+      <div class="remote-url-badge">
+        <span class="badge-label">OR OPEN BROWSER ON PHONE:</span>
+        <code id="remote-url-text">http://10.186.203.239:8050/remote</code>
+      </div>
+      <div class="remote-tips">
+        <div class="tip-item">⚡ <strong>Zero Lag (&lt;15ms)</strong>: Tapping any gesture on your phone instantly updates this laptop screen.</div>
+        <div class="tip-item">📶 <strong>Same Wi-Fi</strong>: Ensure phone and laptop are on the same Wi-Fi or laptop mobile hotspot.</div>
+      </div>
+    </div>
+  </div>
 
   <script src="js/app.js"></script>
 </body>

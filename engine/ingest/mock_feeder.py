@@ -51,6 +51,14 @@ class MockCSIFeeder:
         self.simulated_activity = activity
         self.is_connected = True
 
+    def trigger_gesture(self, gesture_name: str, duration: float = 4.0):
+        """Triggers a realistic momentary gesture sequence that pulses and settles back."""
+        self.scenario_name = "GESTURE_PULSE"
+        self.scenario_start_time = time.time()
+        self.gesture_duration = duration
+        self.simulated_activity = gesture_name
+        self.is_connected = True
+
     def trigger_fall_sequence(self):
         """Automated realistic fall scenario."""
         self.scenario_name = "FALL_SEQUENCE"
@@ -96,6 +104,11 @@ class MockCSIFeeder:
                         # Reset to sitting after fall observation
                         self.scenario_name = None
                         self.simulated_activity = ActivityLabels.SITTING
+            elif self.scenario_name == "GESTURE_PULSE":
+                sec = time.time() - self.scenario_start_time
+                if sec > getattr(self, "gesture_duration", 4.0):
+                    self.scenario_name = None
+                    self.simulated_activity = ActivityLabels.SITTING
 
             self.seq += 1
             raw_iq = self._generate_iq(elapsed)
@@ -121,21 +134,23 @@ class MockCSIFeeder:
         re = self.base_re + noise_re
         im = self.base_im + noise_im
 
-        if self.simulated_activity == ActivityLabels.NO_MOVEMENT:
+        act = str(self.simulated_activity).upper()
+
+        if act == ActivityLabels.NO_MOVEMENT:
             pass  # purely ambient static multipath
 
-        elif self.simulated_activity == ActivityLabels.SITTING:
+        elif act == ActivityLabels.SITTING:
             # Subtle chest breathing motion (0.25 Hz sine modulation on specific subcarriers)
             breath = 2.2 * math.sin(2 * math.pi * 0.25 * t)
             re += breath * 0.6
             im += breath * 0.4
 
-        elif self.simulated_activity == ActivityLabels.STANDING:
+        elif act == ActivityLabels.STANDING:
             # Slight body sway (0.1 Hz slow drift)
             sway = 4.0 * math.sin(2 * math.pi * 0.1 * t)
             re += sway
 
-        elif self.simulated_activity == ActivityLabels.WALKING:
+        elif act == ActivityLabels.WALKING:
             # Multi-subcarrier dynamic Doppler ripple (1.6 Hz stepping cadence)
             step_freq = 1.6
             sub_phases = np.linspace(0, 3 * np.pi, K)
@@ -143,14 +158,43 @@ class MockCSIFeeder:
             re += doppler
             im += doppler * 0.7
 
-        elif self.simulated_activity == ActivityLabels.FAST_MOVEMENT:
+        elif act == ActivityLabels.FAST_MOVEMENT:
             # Rapid turbulent movement across all subcarriers
             fast_freq = 3.5
             turb = 28.0 * np.sin(2 * math.pi * fast_freq * t + np.random.uniform(0, 2*np.pi, K))
             re += turb
             im += turb
 
-        elif self.simulated_activity == "SPIKE_IMPACT":
+        elif "GESTURE_1" in act or "HAND_WAVE" in act or "GESTURE 1" in act:
+            # Gesture 1: Dynamic Hand Wave across direct beam
+            wave_freq = 2.8
+            sub_phases = np.linspace(0, 4 * np.pi, K)
+            envelope = np.exp(-((np.arange(K) - 32) ** 2) / 160.0)
+            doppler = 24.0 * envelope * np.sin(2 * math.pi * wave_freq * t + sub_phases)
+            re += doppler
+            im += doppler * 0.85
+
+        elif "GESTURE_2" in act or "PUSH" in act or "PROXIMITY" in act or "GESTURE 2" in act:
+            # Gesture 2: Forward Hand Push / Proximity Surge
+            push_freq = 1.3
+            envelope = np.exp(-((np.arange(K) - 30) ** 2) / 90.0)
+            surge = 26.0 * envelope * (1.0 + math.sin(2 * math.pi * push_freq * t))
+            re += surge
+            im -= surge * 0.5
+
+        elif "GESTURE_3" in act or "DOUBLE" in act or "SWIPE" in act or "GESTURE 3" in act:
+            # Gesture 3: Rapid 2-Pass Double Swipe
+            burst = 25.0 * np.sin(2 * math.pi * 4.2 * t) * np.cos(np.linspace(-np.pi, np.pi, K))
+            re += burst
+            im += burst * 0.75
+
+        elif "GESTURE_4" in act or "POINT" in act or "HOLD" in act or "GESTURE 4" in act:
+            # Gesture 4: Static Finger Point / Beam Obstruction
+            notch = 22.0 * np.exp(-((np.arange(K) - 28) ** 2) / 40.0)
+            re -= notch
+            im += notch * 0.45
+
+        elif act == "SPIKE_IMPACT":
             # Sudden massive multipath collapse/disturbance spike (fall impact)
             spike = 60.0 * np.sin(np.linspace(0, 5 * np.pi, K))
             re += spike
@@ -162,3 +206,4 @@ class MockCSIFeeder:
             raw_list.append(int(np.clip(re[i], -128, 127)))
 
         return raw_list
+
