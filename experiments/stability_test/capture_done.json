@@ -1,0 +1,8 @@
+{
+  "status": "COMPLETED",
+  "output_csv": "C:\\Users\\ASUS\\Documents\\Final_project_ECE\\experiments\\stability_test\\idle_capture.csv",
+  "total_frames": 8895,
+  "duration_seconds": 300.0260760784149,
+  "measured_rate_hz": 29.64742303824018,
+  "completed_at": 1793132647.4801376
+}

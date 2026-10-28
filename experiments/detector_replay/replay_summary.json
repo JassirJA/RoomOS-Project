@@ -1,0 +1,79 @@
+{
+  "config": {
+    "measured_rate_hz": 29.05384373073219,
+    "enter_frames": 9,
+    "exit_frames": 87,
+    "k_high": 4.0,
+    "k_low": 2.0,
+    "thresh_high": 2.7241856581319297,
+    "thresh_low": 1.7323844188820026,
+    "mu_cal": 0.740583179632075,
+    "sigma_cal": 0.49590061962496373,
+    "num_reliable_subcarriers": 56
+  },
+  "phases": {
+    "still_1": {
+      "frames": 307,
+      "mean_score": 0.7639398826862586,
+      "pct_anomaly": 0.0,
+      "max_anom_frames": 0,
+      "max_anom_sec": 0.0,
+      "max_quiet_frames": 307,
+      "max_quiet_sec": 10.566588119810998
+    },
+    "hand_holds_still": {
+      "frames": 348,
+      "mean_score": 0.9957358226522632,
+      "pct_anomaly": 0.0,
+      "max_anom_frames": 0,
+      "max_anom_sec": 0.0,
+      "max_quiet_frames": 348,
+      "max_quiet_sec": 11.977761126039828
+    },
+    "hand_removed_1": {
+      "frames": 355,
+      "mean_score": 1.0592176390365815,
+      "pct_anomaly": 0.0,
+      "max_anom_frames": 0,
+      "max_anom_sec": 0.0,
+      "max_quiet_frames": 355,
+      "max_quiet_sec": 12.218693102713043
+    },
+    "still_2": {
+      "frames": 356,
+      "mean_score": 0.8922476414905003,
+      "pct_anomaly": 0.0,
+      "max_anom_frames": 0,
+      "max_anom_sec": 0.0,
+      "max_quiet_frames": 356,
+      "max_quiet_sec": 12.253111956523503
+    },
+    "slow_wide_wave": {
+      "frames": 356,
+      "mean_score": 0.7324235122336933,
+      "pct_anomaly": 0.0,
+      "max_anom_frames": 0,
+      "max_anom_sec": 0.0,
+      "max_quiet_frames": 356,
+      "max_quiet_sec": 12.253111956523503
+    },
+    "hand_removed_2": {
+      "frames": 338,
+      "mean_score": 0.9664018600297397,
+      "pct_anomaly": 0.0,
+      "max_anom_frames": 0,
+      "max_anom_sec": 0.0,
+      "max_quiet_frames": 338,
+      "max_quiet_sec": 11.633572587935236
+    },
+    "still_3": {
+      "frames": 348,
+      "mean_score": 0.9633150768262901,
+      "pct_anomaly": 0.0,
+      "max_anom_frames": 0,
+      "max_anom_sec": 0.0,
+      "max_quiet_frames": 348,
+      "max_quiet_sec": 11.977761126039828
+    }
+  }
+}
